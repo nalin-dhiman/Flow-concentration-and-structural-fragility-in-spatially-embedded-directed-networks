@@ -9,40 +9,32 @@ import time
 import signal
 from pathlib import Path
 
-# ----------------------------
-# Path setup: import src and latency engine
-# ----------------------------
+
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent
 sys.path.append(str(project_root))
 sys.path.append(str(project_root / "v6_d_latency_engine" / "src"))
 
-# ----------------------------
-# Imports: Null Models
-# ----------------------------
+
 from utils.nulls.n0_weighted import N0WeightedNull
 from utils.nulls.n1_spatial import N1SpatialNull
 from utils.nulls.n2_block import N2BlockNull
 
-# ----------------------------
-# Import Latency Engine
-# ----------------------------
+
 try:
     from latency_engine import LatencyEngine
 except Exception:
     sys.path.append(str(project_root / "v6_d_latency_engine"))
     from utils.latency_engine import LatencyEngine
 
-# ----------------------------
-# Logging
-# ----------------------------
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def log_heartbeat(msg: str):
     """Heartbeat log with optional memory usage."""
     mem_mb = None
     try:
-        import psutil  # optional
+        import psutil  
         process = psutil.Process(os.getpid())
         mem_mb = process.memory_info().rss / 1024 / 1024
     except Exception:
@@ -59,9 +51,7 @@ class TimeoutException(Exception):
 def timeout_handler(signum, frame):
     raise TimeoutException("Operation timed out")
 
-# ----------------------------
-# Data loading
-# ----------------------------
+
 def load_canonical(args):
     nodes_path = Path(args.nodes)
     edges_path = Path(args.edges)
@@ -78,13 +68,11 @@ def load_canonical(args):
     edges = pd.read_parquet(edges_path) if edges_path.suffix == '.parquet' else pd.read_csv(edges_path)
     targets = pd.read_parquet(targets_path) if targets_path.suffix == '.parquet' else pd.read_csv(targets_path)
 
-    # Map bodyId -> idx if needed
     if "pre_idx" not in edges.columns or "post_idx" not in edges.columns:
         node_map = {bid: i for i, bid in enumerate(nodes["bodyId"].values)}
         edges["pre_idx"] = edges["pre"].map(node_map)
         edges["post_idx"] = edges["post"].map(node_map)
 
-    # Basic integrity
     if edges["pre_idx"].isna().any() or edges["post_idx"].isna().any():
         bad = edges[edges["pre_idx"].isna() | edges["post_idx"].isna()].head(5)
         raise ValueError(f"Edges contain endpoints not found in nodes. Example:\n{bad}")
@@ -108,9 +96,7 @@ def ensure_edge_distances(edges: pd.DataFrame, nodes: pd.DataFrame) -> pd.DataFr
     edges["d_ij"] = np.linalg.norm(p1 - p2, axis=1)
     return edges
 
-# ----------------------------
-# Metrics
-# ----------------------------
+
 def compute_single_config(
     edges: pd.DataFrame,
     nodes: pd.DataFrame,
@@ -123,9 +109,8 @@ def compute_single_config(
     Compute metrics for a single (eta, cap).
     Uses SIGALRM timeout for this config ONLY.
     """
-    # Set timeout for this config
     signal.signal(signal.SIGALRM, timeout_handler)
-    prev_remaining = signal.alarm(0)  # cancel any existing alarm; store remaining
+    prev_remaining = signal.alarm(0)  
     signal.alarm(int(timeout_sec))
 
     metrics = {
@@ -146,7 +131,6 @@ def compute_single_config(
     start_time = time.time()
 
     try:
-        # Energy
         edges = ensure_edge_distances(edges, nodes)
         E_syn = float(edges["s_ij"].sum())
         E_wire_eta = float((edges["s_ij"] * (edges["d_ij"] ** eta)).sum())
@@ -156,7 +140,6 @@ def compute_single_config(
         metrics["E_wire"] = E_wire_eta
         metrics["E_total"] = E_total
 
-        # Latency: random walk transition P
         N = len(nodes)
         A = sp.csr_matrix(
             (edges["s_ij"].values, (edges["pre_idx"].values, edges["post_idx"].values)),
@@ -165,7 +148,6 @@ def compute_single_config(
         deg_out[deg_out == 0] = 1.0
         P = sp.diags(1.0 / deg_out).dot(A)
 
-        # Targets
         target_bids = set(targets["bodyId"].values)
         node_bodyIds = nodes["bodyId"].values
         target_indices = np.where(np.isin(node_bodyIds, list(target_bids)))[0]
@@ -179,7 +161,7 @@ def compute_single_config(
         metrics["residual_norm"] = float(res.get("residual_norm", -1.0))
 
         if not res.get("converged", False):
-            metrics["status"] = "LINEAR_FAIL_MC_USED"  # if engine does fallback internally, backend will reflect it
+            metrics["status"] = "LINEAR_FAIL_MC_USED"  
             logging.warning(f"Linear solve did not converge; backend={metrics['backend']}, residual={metrics['residual_norm']}")
 
         fpt_vec = res.get("fpt_vector", None)
@@ -202,7 +184,6 @@ def compute_single_config(
         logging.error(f"Config eta={eta}, cap={cap} failed: {e}")
         metrics["status"] = "FAILED"
     finally:
-        # Disable config alarm and restore previous remaining time (best-effort)
         signal.alarm(0)
         if prev_remaining:
             signal.alarm(prev_remaining)
@@ -219,7 +200,6 @@ def summarize_to_wide(metrics_rows: list[dict], null_type: str, seed: int) -> di
     """
     out = {"null_type": null_type, "seed": seed}
 
-    # Copy shared fields from first row
     if not metrics_rows:
         raise ValueError("No metrics rows to summarize.")
     first = metrics_rows[0]
@@ -230,13 +210,11 @@ def summarize_to_wide(metrics_rows: list[dict], null_type: str, seed: int) -> di
     out["solver_converged"] = (first.get("status", "OK") == "OK")
     out["solver_residual"] = float(first.get("residual_norm", -1.0))
 
-    # Energy by eta
     for r in metrics_rows:
         eta = float(r["eta"])
         out[f"E_wire_eta_{eta}"] = float(r["E_wire"])
         out[f"E_total_eta_{eta}"] = float(r["E_total"])
 
-    # Latency by cap (latency does not depend on eta; but we use the first occurrence per cap)
     seen_caps = set()
     for r in metrics_rows:
         cap = int(float(r["cap"]))
@@ -245,15 +223,12 @@ def summarize_to_wide(metrics_rows: list[dict], null_type: str, seed: int) -> di
         out[f"L_global_cap_{cap}"] = float(r["L_global"])
         seen_caps.add(cap)
 
-    # Optional convenience metric you already used before
-    # Use the largest cap as representative reachable-only mean if engine exposes it (not here)
+
     out["L_reachable_mean"] = np.nan
 
     return out
 
-# ----------------------------
-# Main seed runner
-# ----------------------------
+
 def run_seed(args):
     out_dir = Path(args.out)
     metrics_dir = out_dir / "per_seed_metrics"
@@ -261,7 +236,6 @@ def run_seed(args):
     metrics_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Configure logging per run (clear handlers to avoid duplication)
     for h in list(logging.getLogger().handlers):
         logging.getLogger().removeHandler(h)
 
@@ -284,7 +258,6 @@ def run_seed(args):
     nodes, edges_real, targets = load_canonical(args)
     adj_real = build_adj(nodes, edges_real)
 
-    # Determine output file naming
     if args.null == "REAL":
         final_file = metrics_dir / "REAL.parquet"
         if final_file.exists():
@@ -305,13 +278,11 @@ def run_seed(args):
             logging.info(f"Seed already completed at {final_file}. Skipping.")
             return
 
-        # Resume support for long-format partials (optional; kept for safety)
         completed_configs = pd.DataFrame()
         if args.resume and partial_file.exists():
             logging.info(f"Resuming from {partial_file}")
             completed_configs = pd.read_parquet(partial_file)
 
-        # Load existing edges if present
         if args.resume and edges_out.exists():
             logging.info(f"Loading existing edges from {edges_out}")
             generated_edges = pd.read_parquet(edges_out)
@@ -352,7 +323,6 @@ def run_seed(args):
         null_type = args.null
         seed = args.seed
 
-    # Compute metrics
     engine = LatencyEngine()
 
     if args.fast_pass:
@@ -364,7 +334,6 @@ def run_seed(args):
 
     results_long = []
 
-    # If resuming, we could skip configs, but the final output is wide anyway.
     for eta in etas:
         for cap in caps:
             log_heartbeat(f"Processing config eta={eta}, cap={cap}")
@@ -372,17 +341,14 @@ def run_seed(args):
             m = compute_single_config(generated_edges, nodes, targets, engine, eta, cap, timeout_sec)
             results_long.append(m)
 
-            # Optional: write partial long file for resume debugging (kept only for nulls)
             if args.null != "REAL":
                 partial_file = metrics_dir / f"{args.null}_seed_{args.seed}.partial.parquet"
                 pd.DataFrame(results_long).to_parquet(partial_file, index=False)
                 log_heartbeat(f"Saved partial results to {partial_file}")
 
-    # Summarize to wide row (this is what your aggregator expects)
     wide = summarize_to_wide(results_long, null_type=null_type, seed=seed)
     pd.DataFrame([wide]).to_parquet(final_file, index=False)
 
-    # Clean partial if exists
     if args.null != "REAL":
         partial_file = metrics_dir / f"{args.null}_seed_{args.seed}.partial.parquet"
         if partial_file.exists():
