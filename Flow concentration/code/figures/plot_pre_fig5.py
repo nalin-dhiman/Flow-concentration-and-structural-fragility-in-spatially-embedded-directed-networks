@@ -1,16 +1,3 @@
-#!/usr/bin/env python3
-"""
-fig5_v5.py  –  definitive version with clean external legend strips.
-
-Layout (3-row GridSpec):
-  Row 0  →  Panel (a) full-width ECDF         legend floats above via transAxes
-  Row 1  →  Panel (b) left | Panel (c) right
-  Row 2  →  Legend strip (b) | Legend strip (c)   [dedicated axes, axis off]
-
-All legends are OUTSIDE the data panels and cannot overlap any curve or bar.
-A thin ·····separator line is drawn between row-1 axes and row-2 strip.
-"""
-
 import argparse
 import pandas as pd
 import numpy as np
@@ -23,7 +10,6 @@ import matplotlib.patches as mpatches
 from pathlib import Path
 import matplotlib as mpl
 
-# ── rcParams ──────────────────────────────────────────────────────────────────
 mpl.rcParams.update({
     "font.family":          "DejaVu Sans",
     "font.size":            9,
@@ -41,22 +27,18 @@ mpl.rcParams.update({
     "pdf.fonttype":         42,
     "ps.fonttype":          42,
 })
+C_BASE   = '#F4A261'  
+C_GEN01  = '#2A9D8F'   
+C_GEN05  = '#E76F51'   
+C_REAL   = '#264653'   
 
-# ── Colour palette ─────────────────────────────────────────────────────────────
-C_BASE   = '#F4A261'   # warm orange  – Base / N2 ECDF
-C_GEN01  = '#2A9D8F'   # teal         – Gen f=0.01
-C_GEN05  = '#E76F51'   # coral-red    – Gen f=0.05
-C_REAL   = '#264653'   # dark slate   – Empirical (thickest)
+MB_COLS  = ['#2A9D8F', '#E76F51', '#F4A261', '#9B5DE5']   
+MB_LS    = ['-',       '--',      ':',       '-.']         
 
-MB_COLS  = ['#2A9D8F', '#E76F51', '#F4A261', '#9B5DE5']   # panel-b line colours
-MB_LS    = ['-',       '--',      ':',       '-.']         # panel-b linestyles
+C_EMP_B  = '#264653'   
+C_N2_B   = '#74C2C4'   
+C_GEN_B  = '#F4A261'   
 
-C_EMP_B  = '#264653'   # bar: Empirical
-C_N2_B   = '#74C2C4'   # bar: N2
-C_GEN_B  = '#F4A261'   # bar: Generated
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 def load_csv(*candidates):
     for p in candidates:
         p = Path(p)
@@ -85,7 +67,6 @@ def topo_mean(df, col, pat):
     return float(s.mean()) if not s.empty else np.nan
 
 
-# ═════════════════════════════════════════════════════════════════════════════
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--v3_dir",   required=True)
@@ -102,28 +83,24 @@ def main():
     topo_df = load_csv(v3   / "tables/topology_summary_by_f.csv")
     gen_df  = gen_df.reset_index(drop=True)
 
-    # ── Figure & GridSpec ─────────────────────────────────────────────────────
-    # 3 rows: [panel-a] / [panel-b  panel-c] / [legend-b  legend-c]
+   
     fig = plt.figure(figsize=(7.2, 8.2))
     gs  = mgridspec.GridSpec(
         3, 2, figure=fig,
-        height_ratios=[1.4, 1.05, 0.35],   # legend strip = 0.35 rel units ≈ 0.62 in
+        height_ratios=[1.4, 1.05, 0.35],   
         hspace=0.52,
         wspace=0.40,
     )
     fig.subplots_adjust(left=0.11, right=0.97, top=0.92, bottom=0.03)
 
-    ax_a  = fig.add_subplot(gs[0, :])    # full-width top
+    ax_a  = fig.add_subplot(gs[0, :])   
     ax_b  = fig.add_subplot(gs[1, 0])
     ax_c  = fig.add_subplot(gs[1, 1])
-    ax_lb = fig.add_subplot(gs[2, 0])    # legend host – panel b
-    ax_lc = fig.add_subplot(gs[2, 1])    # legend host – panel c
+    ax_lb = fig.add_subplot(gs[2, 0])    
+    ax_lc = fig.add_subplot(gs[2, 1])    
     ax_lb.axis('off')
     ax_lc.axis('off')
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Panel (a) – ECDF of edge flux
-    # ══════════════════════════════════════════════════════════════════════════
     spec_a = [
         ('Base',     C_BASE,  '--',  1.5, 'Base ($N_2$)'),
         ('Gen_0.01', C_GEN01, '-.',  1.6, r'Gen ($f{=}0.01$)'),
@@ -144,7 +121,6 @@ def main():
     ax_a.set_xlabel("Target-conditioned flux $J_{ij}$")
     ax_a.set_ylabel("Proportion")
 
-    # Legend centred above panel (a) – in the generous top margin (top=0.92)
     ax_a.legend(
         handles=leg_a,
         loc='lower center',
@@ -153,13 +129,10 @@ def main():
         ncol=4, frameon=False,
         handlelength=2.0, columnspacing=1.0, fontsize=8,
     )
-    # Panel label: to the left of and above the axes
     ax_a.text(-0.08, 1.12, "(a)", transform=ax_a.transAxes,
               ha='left', va='top', fontsize=11, fontweight='bold')
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Panel (b) – normalised metric shift vs rewiring fraction f
-    # ══════════════════════════════════════════════════════════════════════════
+    
     metrics_b = {
         'DNP11_E_weight':  'DNP11 enrichment',
         'flux_share_top1': 'Top-1% flux share',
@@ -199,9 +172,7 @@ def main():
     ax_b.text(-0.20, 1.07, "(b)", transform=ax_b.transAxes,
               ha='left', va='top', fontsize=11, fontweight='bold')
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Panel (c) – topology bar chart
-    # ══════════════════════════════════════════════════════════════════════════
+   
     topo_cols = {
         'deg_mean':          'Out-deg.',
         'modularity_proxy':  'Modularity',
@@ -257,16 +228,11 @@ def main():
     ax_c.text(-0.20, 1.07, "(c)", transform=ax_c.transAxes,
               ha='left', va='top', fontsize=11, fontweight='bold')
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Legend strips (row 2) – clean, outside all data axes
-    # ══════════════════════════════════════════════════════════════════════════
-
-    # Draw a thin horizontal separator line across full figure width
-    # between row-1 axes bottom and row-2 strip top
+    
     fig.canvas.draw()
     lb_pos = ax_lb.get_position()
     ab_pos = ax_b.get_position()
-    sep_y  = (lb_pos.y1 + ab_pos.y0) / 2.0     # midpoint in figure fraction
+    sep_y  = (lb_pos.y1 + ab_pos.y0) / 2.0     
     sep_line = plt.Line2D(
         [0.07, 0.97], [sep_y, sep_y],
         transform=fig.transFigure,
@@ -274,13 +240,11 @@ def main():
     )
     fig.add_artist(sep_line)
 
-    # Small italic sub-heading labels
     ax_lb.text(0.01, 1.0, "Panel (b):", transform=ax_lb.transAxes,
                ha='left', va='top', fontsize=6.5, color='#888888', style='italic')
     ax_lc.text(0.01, 1.0, "Panel (c):", transform=ax_lc.transAxes,
                ha='left', va='top', fontsize=6.5, color='#888888', style='italic')
 
-    # Panel-b legend: 3 columns, no frame
     ax_lb.legend(
         handles=leg_b_handles,
         loc='center',
@@ -291,7 +255,6 @@ def main():
         labelspacing=0.40, columnspacing=1.1,
     )
 
-    # Panel-c legend: 3 columns, no frame
     leg_c = [mpatches.Patch(color=bar_pal[m], label=m) for m in model_order]
     ax_lc.legend(
         handles=leg_c,
@@ -303,7 +266,6 @@ def main():
         labelspacing=0.40, columnspacing=1.1,
     )
 
-    # ── Save ──────────────────────────────────────────────────────────────────
     plt.savefig(args.out_path, bbox_inches='tight', pad_inches=0.05)
     print(f"Saved → {args.out_path}")
 
