@@ -1,0 +1,121 @@
+import pandas as pd
+import numpy as np
+import scipy.sparse as sp
+import logging
+from utils.ranking import to_networkx, rank_edges_by_efficiency
+from utils.compute_metrics import build_conductance_matrix
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+import argparse
+
+def check_sccs(args):
+    path = args.edge_rankings
+    logger.info(f"Loading {path}...")
+    edges = pd.read_parquet(path)
+    
+    # Needs pre_idx, post_idx
+    # They should be preserved if I didn't drop them.
+    # rank_edges_by_efficiency returns sorted edges.
+    # But `run_attribution_v6a.py` merged rankings back to `edges` which had `pre_idx`.
+    # Let's check columns.
+    if 'pre_idx' not in edges.columns:
+        logger.warning("pre_idx not found, re-mapping...")
+        # Need nodes to remap... complicated.
+        # But wait, run_attribution saved it after merging?
+        # Let's check columns first.
+        print(edges.columns)
+        return
+
+    n_nodes = max(edges['pre_idx'].max(), edges['post_idx'].max()) + 1
+    adj_shape = (n_nodes, n_nodes)
+    
+    fractions = [0.0, 0.01, 0.05, 0.10, 0.20]
+    
+    for f in fractions:
+        cutoff = int(len(edges) * f)
+        edges_ablated = edges.sort_values('efficiency', ascending=False).iloc[cutoff:]
+        
+        # Build C to get structure
+        gamma = 1e-6
+        C = build_conductance_matrix(edges_ablated, gamma, adj_shape)
+        
+        n_components, labels = sp.csgraph.connected_components(C, directed=True, connection='strong')
+        _, counts = np.unique(labels, return_counts=True)
+        largest_label = np.argmax(counts)
+        largest_scc_size = np.max(counts)
+        
+        if f == 0.20:
+             # Check what was removed between 10% and 20%
+             prev_cutoff = int(len(edges) * 0.10)
+             curr_cutoff = int(len(edges) * 0.20)
+             # Sorted desc, so these are indices [prev_cutoff : curr_cutoff]
+             removed_subset = edges.sort_values('efficiency', ascending=False).iloc[prev_cutoff:curr_cutoff]
+             
+             logger.info(f"--- Analysis of Edges Removed (10% -> 20%) ---")
+             logger.info(f"Mean s_ij: {removed_subset['s_ij'].mean():.2e}")
+             logger.info(f"Mean d_ij: {removed_subset['d_ij'].mean():.2f}")
+             logger.info(f"Mean Betweenness: {removed_subset['betweenness'].mean():.2e}")
+             logger.info(f"Mean Efficiency: {removed_subset['efficiency'].mean():.2e}")
+             
+             # Compare to remaining
+             remaining = edges.sort_values('efficiency', ascending=False).iloc[curr_cutoff:]
+             logger.info(f"--- Remaining Edges ---")
+             logger.info(f"Mean s_ij: {remaining['s_ij'].mean():.2e}")
+             logger.info(f"Mean d_ij: {remaining['d_ij'].mean():.2f}")
+             
+        # Compute FPT on this SCC
+        scc_mask = (labels == largest_label)
+        scc_indices = np.where(scc_mask)[0]
+        
+        # Build P
+        # Need P for FPT
+        from utils.matrix_utils import normalize_transition_matrix, solve_absorbing_fpt
+        P = normalize_transition_matrix(C)
+        P_scc = P[scc_indices, :][:, scc_indices]
+        
+        # Random Targets
+        np.random.seed(42)
+        targets = np.random.choice(len(scc_indices), 50, replace=False)
+        
+        fpt_values = []
+        # Sample a few source nodes (e.g. 10) instead of full matrix inverse? 
+        # solve_absorbing_fpt solves for ALL nodes to reach target set?
+        # No, solve_absorbing_fpt(P, target_indices) returns vector of mean FPT for ALL nodes.
+        # Wait, let's check input to solve_absorbing_fpt.
+        # It takes (P, target_indices). Returns fpt_vector (size N).
+        # So I just need to call it once per target set?
+        # NO. The function name implies "Absorbing FPT".
+        # Usually we set targets as absorbing states.
+        # If we pass multiple targets, do we want "time to hit ANY target"?
+        # My `evaluate_graph_performance` loop:
+        # for t in targets:
+        #    t_fpts = solve_absorbing_fpt(P_scc, [t])
+        #    ... append(valid_fpts)
+        # This computes "Time to hit Target T" averaged over all start nodes.
+        # And we average this over 50 targets.
+        # So it's "Mean FPT to a random target".
+        
+        # Let's do a quick check for 5 targets to see values.
+        sample_targets = targets[:5]
+        mean_fpts = []
+        reachability_pcts = []
+        for t in sample_targets:
+            fpt_vec = solve_absorbing_fpt(P_scc, np.array([t]))
+            # Handle float precision/unreachable (though SCC should be reachable)
+            valid = fpt_vec[fpt_vec < 1e10] # Filter infinity
+            reachability_pcts.append(len(valid) / len(scc_indices))
+            if len(valid) > 0:
+                mean_fpts.append(np.mean(valid))
+        
+        avg_fpt = np.mean(mean_fpts) if mean_fpts else np.nan
+        avg_reach = np.mean(reachability_pcts) if reachability_pcts else 0.0
+        
+        logger.info(f"Fraction: {f:.0%}, SCC: {largest_scc_size}, Mean FPT: {avg_fpt:.2f}, Reachable: {avg_reach:.1%}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--edge_rankings", type=str, required=True, help="Path to edge rankings parquet")
+    args = parser.parse_args()
+    check_sccs(args)
