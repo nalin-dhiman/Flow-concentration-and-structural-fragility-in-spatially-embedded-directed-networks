@@ -29,23 +29,19 @@ def get_rgba(color, alpha):
     return mcolors.to_rgba(color, alpha)
 
 def plot_network_panel(ax, G, pos, plot_mode, dn_nodes, base_node_size, dn_node_size):
-    # Colors
     comp_colors = {
         'medulla': '#1f77b4',
         'lobula': '#2ca02c',
         'lobula_plate': '#ff7f0e',
     }
     
-    # Filter nodes based on plot_mode
     if plot_mode == 'all':
         plot_nodes = list(G.nodes(data=True))
     else:
-        # e.g. plot_mode = 'medulla'
         plot_nodes = [(n, d) for n, d in G.nodes(data=True) if d['comp'] == plot_mode]
         
     filtered_node_ids = set([n for n, d in plot_nodes])
     
-    # Draw regular nodes for this compartment selection
     for comp, color in comp_colors.items():
         if plot_mode != 'all' and comp != plot_mode:
             continue
@@ -58,7 +54,6 @@ def plot_network_panel(ax, G, pos, plot_mode, dn_nodes, base_node_size, dn_node_
             if nodes_col is not None:
                 nodes_col.set_zorder(3)
 
-    # Draw DNs
     dn_plot_nodes = [n for n, d in plot_nodes if d.get('is_dn', False)]
     if dn_plot_nodes:
         dn_col = nx.draw_networkx_nodes(G, pos, nodelist=dn_plot_nodes, node_color='#d62728', 
@@ -67,7 +62,6 @@ def plot_network_panel(ax, G, pos, plot_mode, dn_nodes, base_node_size, dn_node_
         if dn_col is not None:
             dn_col.set_zorder(5)
 
-    # Filter edges based on plot_mode. Edges must connect two nodes in the panel.
     valid_edges = [(u, v, d) for u, v, d in G.edges(data=True) if u in filtered_node_ids and v in filtered_node_ids]
     
     if plot_mode == 'all':
@@ -82,15 +76,12 @@ def plot_network_panel(ax, G, pos, plot_mode, dn_nodes, base_node_size, dn_node_
     reg_edges = [(u, v) for u, v, d in valid_edges if not d['is_dn_target']]
     dn_edges = [(u, v) for u, v, d in valid_edges if d['is_dn_target']]
 
-    # Subsample background edges if too dense for visualization
     max_backbone_edges_display = 15000
     if len(reg_edges) > max_backbone_edges_display:
         import random
-        # Ensure repeatable sampling
         random.seed(42)
         reg_edges = random.sample(reg_edges, max_backbone_edges_display)
 
-    # Enable rasterization for zorder < 1
     ax.set_rasterization_zorder(1)
     
     def draw_line_collection(edges, color, lw, zorder, rasterized):
@@ -101,17 +92,13 @@ def plot_network_panel(ax, G, pos, plot_mode, dn_nodes, base_node_size, dn_node_
         lc = LineCollection(segments, colors=color, linewidths=lw, alpha=1.0, zorder=zorder, rasterized=rasterized)
         ax.add_collection(lc)
 
-    # Draw white shadow layer behind background edges to boost visibility (Rasterized)
     draw_line_collection(reg_edges, color='#f5f5f5', lw=0.4, zorder=-3, rasterized=True)
 
-    # Draw background edges (Rasterized solid hex to simulate alpha=0.18 without breaking PDF rasterization)
     draw_line_collection(reg_edges, color='#dddddd', lw=reg_lw, zorder=-2, rasterized=True)
     
-    # Draw target-terminating edges (Vector)
-    # Using #d62728 alpha 0.60 simulation -> #e67d7e 
+    
     draw_line_collection(dn_edges, color='#e67d7e', lw=0.45, zorder=-1, rasterized=False)
 
-    # Clean axes
     ax.set_aspect('equal')
     ax.set_xticks([])
     ax.set_yticks([])
@@ -133,17 +120,14 @@ def main():
 
     setup_plot_style()
     
-    # Load data
     dn_df = pd.read_csv(dn_audit_path)
     dn_nodes = set(dn_df['bodyId'].values)
 
     edges_df = pd.read_csv(bb_edges_path)
     G = nx.DiGraph()
 
-    # Collect nodes and compartment properties
     node_props = {}
     for _, row in edges_df.iterrows():
-        # Source node
         u = row['pre_idx']
         if u not in node_props:
             node_props[u] = {
@@ -151,7 +135,6 @@ def main():
                 'comp': str(row['pre_comp']).lower(),
                 'is_dn': u in dn_nodes
             }
-        # Target node
         v = row['post_idx']
         if v not in node_props:
             node_props[v] = {
@@ -169,7 +152,6 @@ def main():
 
     pos = nx.get_node_attributes(G, 'pos')
     
-    # Determine global limits to include ALL nodes (no cropping)
     all_x = [p[0] for p in pos.values()]
     all_y = [p[1] for p in pos.values()]
     
@@ -206,7 +188,6 @@ def main():
         ax.set_ylim(y_lim)
         ax.text(0.01, 0.99, label, transform=ax.transAxes, fontsize=10, fontweight='bold', va='top')
 
-    # Add legend to Panel A
     legend_elements = [
         Line2D([0], [0], marker='o', color='w', label='Medulla neurons', markerfacecolor='#1f77b4', markersize=6, markeredgecolor='black', markeredgewidth=0.3),
         Line2D([0], [0], marker='o', color='w', label='Lobula neurons', markerfacecolor='#2ca02c', markersize=6, markeredgecolor='black', markeredgewidth=0.3),
