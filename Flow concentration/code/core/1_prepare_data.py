@@ -12,8 +12,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 
-# Local imports (assuming src is in path or run as module)
-# We will use relative imports if running as package, or add CWD to path
+
 sys.path.append(str(Path(__file__).parent.parent))
 from utils.io_utils import (
     setup_logging, load_neurons, load_connections,
@@ -42,7 +41,6 @@ def parse_args():
     return parser.parse_args()
 
 def plot_scc_sizes(adj, out_path):
-    """Plot SCC size distribution."""
     n_components, labels = sp.csgraph.connected_components(adj, directed=True, connection='strong')
     _, counts = np.unique(labels, return_counts=True)
     largest = counts.max()
@@ -60,10 +58,8 @@ def plot_scc_sizes(adj, out_path):
     plt.close()
 
 def plot_weight_vs_distance_binned(d, w, out_path, seed=42):
-    """Deterministic scatter + binned mean plot."""
     np.random.seed(seed)
     
-    # Downsample for scatter
     mask = np.random.rand(len(d)) < min(1.0, 200000 / len(d))
     d_samp = d[mask]
     w_samp = w[mask]
@@ -71,7 +67,6 @@ def plot_weight_vs_distance_binned(d, w, out_path, seed=42):
     plt.figure(figsize=(6, 4))
     plt.scatter(d_samp, w_samp, alpha=0.1, s=1, c='gray', label='Sampled Edges')
     
-    # Binned stats
     if len(d) > 0:
         bins = np.linspace(d.min(), d.max(), 50)
         bin_idx = np.digitize(d, bins)
@@ -134,7 +129,6 @@ class CustomJSONEncoder(json.JSONEncoder):
 def main():
     args = parse_args()
     
-    # 0. Setup Directories
     out_dir = args.out_root / args.version
     if out_dir.exists():
         if args.force:
@@ -160,7 +154,6 @@ def main():
     
     start_time = time.time()
     
-    # 1. Load Data
     logging.info("Step 1: Loading Data...")
     neurons = load_neurons(args.raw_dir / "Neuprint_Neurons.feather")
     conns = load_connections(args.raw_dir / "Neuprint_Neuron_Connections.feather")
@@ -183,100 +176,79 @@ def main():
     conns_n_rows = len(conns)
     conns_total_synapses = conns['s_ij'].sum()
     
-    # 2. Process Connections
     logging.info("Step 2: Processing Connections...")
     
-    # Aggregate (Strict Sum) to ensure uniqueness
-    # Note: Neuprint export might already be unique, but we enforce it.
+   
     logging.info("Aggregating connections by (pre, post)...")
     conns = conns.groupby(['pre', 'post'], as_index=False)['s_ij'].sum()
     
-    # Check endpoints before filtering
     valid_bodyIds = set(neurons['bodyId'])
     endpoints_known_mask = conns['pre'].isin(valid_bodyIds) & conns['post'].isin(valid_bodyIds)
     pct_known_endpoints = (endpoints_known_mask.sum() / len(conns)) * 100
     logging.info(f"Connections with known endpoints: {pct_known_endpoints:.2f}%")
 
     
-    # Filter: Min Synapses
     logging.info(f"Filtering min_synapses >= {args.min_synapses}")
     conns = conns[conns['s_ij'] >= args.min_synapses]
     
-    # Filter: Autapses
     if args.remove_autapses:
         logging.info("Removing self-loops (autapses)")
         n_loops = (conns['pre'] == conns['post']).sum()
         conns = conns[conns['pre'] != conns['post']]
         logging.info(f"Removed {n_loops} autapses.")
     
-    # 3. Coordinate Integration & Distance
     logging.info("Step 3: Calculating Distances...")
     
-    # Map coordinates
     node_map = neurons.set_index('bodyId')[['x', 'y', 'z']]
     
-    # We only keep edges where both nodes are in the neuron table
     valid_nodes = set(neurons['bodyId'])
     conns = conns[conns['pre'].isin(valid_nodes) & conns['post'].isin(valid_nodes)]
     
-    # Join for Coords
     pre_coords = node_map.loc[conns['pre']].values
     post_coords = node_map.loc[conns['post']].values
     
-    # Euclidean Distance
     d_sq = np.sum((pre_coords - post_coords)**2, axis=1)
     conns['d_ij'] = np.sqrt(d_sq)
     
-    # Filter: Missing Positions (if enabled)
     if args.drop_missing_positions:
         logging.info("Dropping edges with missing distance...")
         n_before = len(conns)
         conns = conns.dropna(subset=['d_ij'])
         logging.info(f"Dropped {n_before - len(conns)} edges missing coords.")
     
-    # 4. Weight Calculation
     logging.info(f"Step 4: Calculating Weights ({args.weight_map})...")
     if args.weight_map == "linear":
         conns['w_ij'] = conns['s_ij'].astype(float)
     elif args.weight_map == "log":
         conns['w_ij'] = np.log1p(conns['s_ij'])
     
-    # 5. Node Metrics & Final Filter (Isolates)
     logging.info("Step 5: Updating Node Metrics and Removing Isolates...")
     
-    # Compute degrees on 'conns'
     in_degree = conns.groupby('post')['s_ij'].count().rename("in_degree")
     out_degree = conns.groupby('pre')['s_ij'].count().rename("out_degree")
     in_strength = conns.groupby('post')['w_ij'].sum().rename("in_strength")
     out_strength = conns.groupby('pre')['w_ij'].sum().rename("out_strength")
     
-    # Merge back to neurons
     neurons = neurons.set_index('bodyId')
     neurons = neurons.join([in_degree, out_degree, in_strength, out_strength], how='left')
     neurons[['in_degree', 'out_degree', 'in_strength', 'out_strength']] = \
         neurons[['in_degree', 'out_degree', 'in_strength', 'out_strength']].fillna(0)
     
-    # Remove Isolates
     active_mask = (neurons['in_degree'] > 0) | (neurons['out_degree'] > 0)
     neurons_active = neurons[active_mask].reset_index() # bodyId becomes column
     
     logging.info(f"Removed {len(neurons) - len(neurons_active)} isolates.")
     
-    # Filter edges again to be sure both ends are in active set
     active_ids = set(neurons_active['bodyId'])
     conns_final = conns[conns['pre'].isin(active_ids) & conns['post'].isin(active_ids)].copy()
     
-    # 6. Sanity Checks
     logging.info("Step 6: Running Sanity Checks...")
     validate_graph(conns_final)
     check_uniqueness(neurons_active)
-    # Note: We pass neurons_active here
     completeness_stats = check_completeness(neurons_active, conns_final)
     
-    # 7. Artifact Generation
     logging.info("Step 7: Generating Artifacts...")
     
-    # Sparse Matrix
     node_to_idx = {bid: i for i, bid in enumerate(neurons_active['bodyId'])}
     row_idx = conns_final['pre'].map(node_to_idx).values
     col_idx = conns_final['post'].map(node_to_idx).values
@@ -287,7 +259,6 @@ def main():
         shape=(len(neurons_active), len(neurons_active))
     )
     
-    # Save files
     neurons_active.to_parquet(canonical_dir / "nodes.parquet")
     conns_final.to_parquet(canonical_dir / "edges.parquet")
     sp.save_npz(canonical_dir / "adjacency_csr.npz", adj_csr)
@@ -296,10 +267,8 @@ def main():
         dist_df = conns_final[['pre', 'post', 'd_ij']].dropna()
         dist_df.to_parquet(canonical_dir / "distance_edges.parquet")
     
-    # SCC
     scc_metrics = compute_scc(adj_csr)
     
-    # Plots
     logging.info("Generating Plots...")
     plot_hist(neurons_active['in_degree'], "In Degree", "Degree", plots_dir / "degree_in_hist.png")
     plot_hist(neurons_active['out_degree'], "Out Degree", "Degree", plots_dir / "degree_out_hist.png")
@@ -311,10 +280,8 @@ def main():
         plot_hist(valid_d['d_ij'], "Distance Histogram", "Distance", plots_dir / "distance_hist.png", log=False)
         plot_weight_vs_distance_binned(valid_d['d_ij'].values, valid_d['w_ij'].values, plots_dir / "weight_vs_distance.png", seed=args.seed)
     
-    # SCC Sizes
     plot_scc_sizes(adj_csr, plots_dir / "scc_sizes.png")
     
-    # Summaries - PRECISE DEFINITIONS FOR V2_C
     summaries = {
         "meta": vars(args),
         "timestamp": datetime.now().isoformat(),
@@ -345,7 +312,6 @@ def main():
     with open(canonical_dir / "summaries.json", "w") as f:
         json.dump(summaries, f, indent=2, cls=CustomJSONEncoder)
         
-    # Manifest with Provenance
     env_info = get_env_info()
     file_info = {
         "neurons": get_file_info(args.raw_dir / "Neuprint_Neurons.feather"),
@@ -368,7 +334,6 @@ def main():
     
     write_manifest(out_dir / "data_manifest.yaml", manifest_config, env_info, file_info)
     
-    # Checksums (Split)
     checksums = compute_checksums(out_dir)
     
     canonical_checksums = {k: v for k, v in checksums.items() if k.startswith("canonical/") and "checksums.json" not in k}
@@ -380,7 +345,6 @@ def main():
     with open(reports_dir / "checksums_reports.json", "w") as f:
         json.dump(report_checksums, f, indent=2, cls=CustomJSONEncoder)
         
-    # Final Report
     with open(reports_dir / "sanity_report.md", "w") as f:
         f.write("# Sanity Report\n\n")
         f.write("## Status: PASS\n\n")
@@ -393,7 +357,6 @@ def main():
     logging.info(f"Build Validated & Complete in {time.time() - start_time:.2f}s")
     close_logging()
     
-    # Print Done Message
     print(f"DONE: {args.version}")
     print(f"Nodes: {len(neurons_active)}, Edges: {len(conns_final)}")
     print(f"SCC: {scc_metrics['largest_scc_fraction']:.2%}")
