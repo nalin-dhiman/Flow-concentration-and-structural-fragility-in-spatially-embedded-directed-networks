@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-# Data URLs (Assume user places them in ../data/raw manually later or downloads)
-# For the purpose of the pipeline, we assume they exist in ../data/raw/
 
 RAW_DIR="../data/raw"
 PROC_DIR="../data/processed"
