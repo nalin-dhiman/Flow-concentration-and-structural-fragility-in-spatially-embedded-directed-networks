@@ -12,11 +12,9 @@ from pathlib import Path
 from typing import Dict, Any, Tuple
 
 def setup_logging(log_path: Path):
-    """Configures logging to file and stdout."""
     folder = log_path.parent
     folder.mkdir(parents=True, exist_ok=True)
     
-    # Clear existing handlers to avoid duplication
     root = logging.getLogger()
     if root.handlers:
         for handler in root.handlers:
@@ -33,18 +31,15 @@ def setup_logging(log_path: Path):
     )
 
 def close_logging():
-    """Flushes and closes all logging handlers."""
     root = logging.getLogger()
     for handler in root.handlers:
         handler.flush()
         handler.close()
 
 def parse_soma_location(s: str) -> Tuple[float, float, float]:
-    """Parses neo4j point string '{x:..., y:..., z:...}' into tuple."""
     if not isinstance(s, str) or not s.startswith("{"):
         return (np.nan, np.nan, np.nan)
     try:
-        # distinct format: {x:49929, y:20895, z:14711}
         parts = s.strip("{}").split(",")
         coords = {}
         for p in parts:
@@ -55,17 +50,13 @@ def parse_soma_location(s: str) -> Tuple[float, float, float]:
         return (np.nan, np.nan, np.nan)
 
 def load_neurons(path: Path) -> pd.DataFrame:
-    """Loads neurons feather file and normalizes columns."""
     logging.info(f"Loading neurons from {path}")
     df = pd.read_feather(path)
     
-    # Normalize ID
     if ":ID(Body-ID)" in df.columns:
         df = df.rename(columns={":ID(Body-ID)": "bodyId"})
     
-    # Parse Coordinates
     if "x" not in df.columns:
-        # Check for neo4j point format
         point_col = [c for c in df.columns if "somaLocation" in c and "point" in c]
         if point_col:
             logging.info(f"Parsing coordinates from {point_col[0]}")
@@ -76,14 +67,12 @@ def load_neurons(path: Path) -> pd.DataFrame:
         else:
             logging.warning("No coordinate columns found!")
     
-    # Type mapping (optional, ensure exists)
     if "type" not in df.columns and "type:string" in df.columns:
          df = df.rename(columns={"type:string": "type"})
 
     return df
 
 def load_connections(path: Path) -> pd.DataFrame:
-    """Loads connections feather file and normalizes columns."""
     logging.info(f"Loading connections from {path}")
     df = pd.read_feather(path)
     
@@ -94,9 +83,7 @@ def load_connections(path: Path) -> pd.DataFrame:
     }
     df = df.rename(columns=rename_map)
     
-    # Ensure s_ij exists
     if "s_ij" not in df.columns:
-        # Fallback to 'weight' if standard name not found
         if "weight" in df.columns:
              df = df.rename(columns={"weight": "s_ij"})
         else:
@@ -105,7 +92,6 @@ def load_connections(path: Path) -> pd.DataFrame:
     return df
 
 def get_file_info(path: Path) -> Dict[str, Any]:
-    """Returns file size, mtime, and sha256."""
     stats = path.stat()
     sha256 = hashlib.sha256()
     with open(path, "rb") as f:
@@ -120,7 +106,6 @@ def get_file_info(path: Path) -> Dict[str, Any]:
     }
 
 def get_env_info() -> Dict[str, str]:
-    """Returns python and package versions."""
     packages = ['pandas', 'numpy', 'scipy', 'pyarrow', 'networkx', 'matplotlib']
     pkg_versions = {}
     for pkg in packages:
@@ -136,7 +121,6 @@ def get_env_info() -> Dict[str, str]:
     }
 
 def write_manifest(path: Path, config: Dict[str, Any], env_info: Dict = None, file_info: Dict = None):
-    """Writes the build configuration to yaml (safe dump) with provenance."""
     logging.info(f"Writing manifest to {path}")
     
     start_config = config.copy()
@@ -145,11 +129,10 @@ def write_manifest(path: Path, config: Dict[str, Any], env_info: Dict = None, fi
     if file_info:
         start_config['input_files'] = file_info
 
-    # Recursive converter for Path and numpy types
     def _convert(obj):
         if isinstance(obj, Path):
             return str(obj)
-        if hasattr(obj, 'item'): # numpy scalars
+        if hasattr(obj, 'item'): 
             return obj.item()
         if isinstance(obj, dict):
             return {k: _convert(v) for k, v in obj.items()}
@@ -163,7 +146,6 @@ def write_manifest(path: Path, config: Dict[str, Any], env_info: Dict = None, fi
         yaml.safe_dump(clean_config, f, sort_keys=False)
 
 def compute_checksums(directory: Path) -> Dict[str, str]:
-    """Computes SHA256 checksums for all files in directory."""
     checksums = {}
     for root, _, files in os.walk(directory):
         for file in files:
