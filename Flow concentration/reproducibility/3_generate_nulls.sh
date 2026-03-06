@@ -1,14 +1,12 @@
 #!/bin/bash
 set -e
 
-# Uses output from Step 1
 PROC_DIR="../data/processed/v1_submission/canonical"
 CODE_DIR="../code"
 OUT_DIR="../results/nulls"
 
 mkdir -p "$OUT_DIR"
 
-# N0, N1, N2 with just a few seeds for presentation (production ran 30)
 SEEDS=(1 2 3)
 NULLS=("N0" "N1" "N2")
 
