@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-echo "====================================================="
-echo "  Nature Communications Submission Reproduction Pipeline"
-echo "====================================================="
+echo 
+echo 
+echo
 
 echo "Step 1: Data Preparation"
 bash 1_prepare_data.sh
@@ -20,5 +20,5 @@ bash 4_backbone.sh
 echo "Step 5: Perturbation Analysis"
 bash 5_perturbation.sh
 
-echo "All steps completed successfully."
-echo "Results and figures should now be available in the relative directories."
+echo "done"
+echo "done"
