@@ -25,4 +25,4 @@ To reproduce the work from beginning to end, run the bash scripts located in `re
 6. Alternatively, just run `bash reproducibility/run_all.sh` to execute the whole pipeline at once.
 
 ## Important Note
-Before running, you must ensure the primary dataset (`nodes.parquet`, `edges.parquet`, `targets_fixed.parquet`) is available in the `data/` folder, as they were excluded from this minimized archive due to file size constraints.
+Before running, you must ensure the primary dataset (`nodes.parquet`, `edges.parquet`, `targets_fixed.parquet`) is available in the `data/` folder, as they were excluded from this minimised archive due to file size constraints. As these files are very large, you have to process them through the entire original flyEM dataset. You must use HPC for this. 
