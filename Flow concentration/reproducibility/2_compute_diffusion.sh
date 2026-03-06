@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-# Uses output from Step 1
 PROC_DIR="../data/processed/v1_submission/canonical"
 CODE_DIR="../code"
 OUT_DIR="../results/empirical"
