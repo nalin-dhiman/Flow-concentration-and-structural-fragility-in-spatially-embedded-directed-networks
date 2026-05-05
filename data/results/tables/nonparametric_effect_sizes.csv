@@ -1,0 +1,4 @@
+Metric,Real_Value,Generative_Median,MannWhitney_u_stat,MannWhitney_p_val,Cliffs_Delta,Effect_Size,Rank_Percentile,Is_Extreme_Tail
+DNP11_E_weight,6.002237876568121,6.446067272446868,12.0,0.392685929272966,-0.52,large,0.24,False
+Relative_Drop,0.629293708992667,-0.00498563429007,50.0,0.0392156862745098,1.0,large,1.0,True
+flux_share_top1,0.3881261144659135,0.25567118819125667,50.0,0.0392156862745098,1.0,large,1.0,True

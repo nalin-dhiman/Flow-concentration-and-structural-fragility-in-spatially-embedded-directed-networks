@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "raw_dir": "../optic-lobe-v1.1-neuprint-tables",
+    "out_root": ".",
+    "version": "v2_b",
+    "weight_map": "linear",
+    "min_synapses": 1,
+    "remove_autapses": 1,
+    "force": false,
+    "drop_missing_positions": 1,
+    "seed": 42,
+    "strict": true
+  },
+  "timestamp": "2026-02-06T19:27:03.920603",
+  "initial_stats": {
+    "n_original_nodes_raw": 10314236,
+    "n_original_nodes_traced": 52445,
+    "n_original_edges": 22249949,
+    "total_synapses_raw": 49508904
+  },
+  "final_stats": {
+    "n_nodes": 46463,
+    "n_edges": 6099492,
+    "total_synapses": 23753506.0,
+    "total_weight": 23753506.0
+  },
+  "completeness_stats": {
+    "pct_nodes_with_coords": 100.0,
+    "pct_edges_with_distances": 100.0
+  },
+  "scc_metrics": {
+    "scc_count": 1155,
+    "largest_scc_size": 45276,
+    "largest_scc_fraction": 0.9744527903923552
+  }
+}

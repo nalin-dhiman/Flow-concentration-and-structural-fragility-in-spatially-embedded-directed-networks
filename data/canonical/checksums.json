@@ -1,0 +1,7 @@
+{
+  "canonical/adjacency_csr.npz": "d63d0a1a6f470b1a30aa59be1891e1ec60c5d3b7df549439f3218b5de5daec38",
+  "canonical/edges.parquet": "f143a75cc9d38151fb1bf985efbf413f0caf65a190b4bd320011678dd9ac92b5",
+  "canonical/nodes.parquet": "4faf876596d99f93357aa673ee2119da2b12fc3e39658c526aedd0ceda3fa8cd",
+  "canonical/distance_edges.parquet": "ce6807ddcf1a8221f3831a7eab6b825167b93bd6211e5b7975bd1861d0502411",
+  "canonical/summaries.json": "e3327ab9572654e99b1d60dbcf98cfaaa8bf85cce7fb79ed6a6a29f1d4b7f776"
+}

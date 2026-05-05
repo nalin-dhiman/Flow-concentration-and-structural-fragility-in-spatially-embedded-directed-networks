@@ -1,0 +1,7 @@
+cost,null,empirical,null_mean,percentile
+additive $E_{\mathrm{total}}$,N0,357817655571.22003,485718347609.8222,0.0
+additive $E_{\mathrm{total}}$,N1,357817655571.22003,345413641403.6751,100.0
+additive $E_{\mathrm{total}}$,N2,357817655571.22003,372774334820.1248,0.0
+multiplicative term $E_{\mathrm{wire}}$,N0,357793902065.22003,485694594103.8222,0.0
+multiplicative term $E_{\mathrm{wire}}$,N1,357793902065.22003,345389887897.6751,100.0
+multiplicative term $E_{\mathrm{wire}}$,N2,357793902065.22003,372750581314.1248,0.0

@@ -1,0 +1,8 @@
+*.parquet binary
+*.npz binary
+*.npy binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.feather binary
+

@@ -1,0 +1,10 @@
+raw_dir: ../optic-lobe-v1.1-neuprint-tables
+out_root: .
+version: v2_b
+weight_map: linear
+min_synapses: 1
+remove_autapses: 1
+force: false
+drop_missing_positions: 1
+seed: 42
+strict: true
