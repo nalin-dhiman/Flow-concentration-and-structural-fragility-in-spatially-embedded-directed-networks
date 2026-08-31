@@ -5,6 +5,5 @@ authors:
     given-names: Nalin
   - family-names: Panwar
     given-names: Siddharth
-repository-code: "https://github.com/nalin-dhiman/Flow-concentration-and-structural-fragility-in-spatially-embedded-directed-networks"
+repository-code: "https://github.com/NSSIL/Flow-concentration-and-structural-fragility-in-spatially-embedded-directed-networks"
 message: "Please cite this repository and the associated project when reusing the code or derived data."
-
